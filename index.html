@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Age calcuator</title> 
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
+  </head>
+  <body> 
+    <form id="ageForm"   class="calculator">  
+      <h1>age calculator: </h1>  
+      <legend>enter your birth date:</legend> 
+     <input type="text" id="birthday" placeholder="Select your birthday"> 
+      <button type="submit">Calculate</button>  
+    </form> 
+    <div id="result"></div> 
+    <div>
+      <button id="resetBtn">Calculate Again</button>
+    </div>
+  </body>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+ <script src="https://cdn.jsdelivr.net/npm/luxon/build/global/luxon.min.js"></script>
+  <script src="logic.js"></script>
+</html>
