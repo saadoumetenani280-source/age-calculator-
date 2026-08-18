@@ -1,26 +1,422 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Age calcuator</title> 
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_blue.css">
-  </head>
-  <body> 
-    <form id="ageForm"   class="calculator">  
-      <h1>age calculator: </h1>  
-      <legend>enter your birth date:</legend> 
-     <input type="text" id="birthday" placeholder="Select your birthday"> 
-      <button type="submit">Calculate</button>  
-    </form> 
-    <div id="result"></div> 
-    <div>
-      <button id="resetBtn">Calculate Again</button>
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AuraAge — Modern Age & Life Insights Calculator</title>
+  <meta name="description" content="Calculate your exact age in years, months, days, hours, and seconds. Discover your next birthday countdown, zodiac sign, life milestones, and planetary age." />
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Flatpickr CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  
+  <!-- Main CSS -->
+  <link rel="stylesheet" href="style.css" />
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <!-- Main App Shell -->
+  <div class="app-container">
+    
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="sparkles"></i>
+        </div>
+        <div class="brand-text">
+          <h1>Aura<span>Age</span></h1>
+          <p>Precision Age & Life Insights</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="savedProfilesBtn" class="icon-btn" title="Saved Birthdays" aria-label="Saved Birthdays">
+          <i data-lucide="bookmark"></i>
+          <span class="badge" id="savedCountBadge" style="display:none;">0</span>
+        </button>
+        <button id="themeToggle" class="icon-btn" title="Toggle Theme" aria-label="Toggle Theme">
+          <i data-lucide="sun" class="sun-icon"></i>
+          <i data-lucide="moon" class="moon-icon"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Input Card -->
+      <section class="calculator-card glass-card">
+        <form id="ageForm" class="calc-form" novalidate>
+          <div class="form-header">
+            <h2>When were you born?</h2>
+            <p>Select your date of birth to unlock comprehensive life metrics</p>
+          </div>
+
+          <div class="input-group">
+            <label for="birthday">
+              <i data-lucide="calendar"></i> Date of Birth
+            </label>
+            <div class="input-wrapper">
+              <input type="text" id="birthday" placeholder="Select your birth date..." readonly required />
+              <button type="button" id="clearInputBtn" class="clear-input" title="Clear input" aria-label="Clear date">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Presets -->
+          <div class="preset-chips">
+            <span class="preset-label">Quick Jump:</span>
+            <button type="button" class="chip" data-years-ago="18">18 yrs ago</button>
+            <button type="button" class="chip" data-years-ago="21">21 yrs ago</button>
+            <button type="button" class="chip" data-years-ago="30">30 yrs ago</button>
+            <button type="button" class="chip" data-years-ago="50">50 yrs ago</button>
+          </div>
+
+          <!-- Optional Custom Target Date -->
+          <div class="advanced-toggle-wrapper">
+            <button type="button" id="toggleTargetDate" class="text-btn">
+              <i data-lucide="sliders-horizontal"></i>
+              <span>Calculate age at specific date</span>
+            </button>
+          </div>
+
+          <div id="targetDateContainer" class="input-group target-date-group hidden">
+            <label for="targetDate">
+              <i data-lucide="clock"></i> Calculate Age On (Default: Today)
+            </label>
+            <div class="input-wrapper">
+              <input type="text" id="targetDate" placeholder="Select target date (Today)" readonly />
+            </div>
+          </div>
+
+          <!-- Profile Name input for saving -->
+          <div class="profile-save-row">
+            <div class="input-group flex-1">
+              <label for="profileName">
+                <i data-lucide="user"></i> Name / Label <span class="optional-text">(optional)</span>
+              </label>
+              <div class="input-wrapper">
+                <input type="text" id="profileName" placeholder="e.g. Myself, Sarah, Dad" maxlength="30" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="button-group">
+            <button type="submit" id="calculateBtn" class="btn btn-primary">
+              <i data-lucide="calculator"></i>
+              <span>Calculate Age</span>
+            </button>
+            <button type="button" id="saveProfileBtn" class="btn btn-secondary" title="Save this birthday">
+              <i data-lucide="bookmark-plus"></i>
+              <span>Save</span>
+            </button>
+            <button type="button" id="resetBtn" class="btn btn-ghost" title="Reset everything">
+              <i data-lucide="rotate-ccw"></i>
+              <span>Reset</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Saved Profiles Drawer / Quick List -->
+        <div id="savedChipsBar" class="saved-chips-bar hidden">
+          <span class="saved-title"><i data-lucide="users"></i> Saved:</span>
+          <div id="savedChipsList" class="saved-chips-list"></div>
+        </div>
+      </section>
+
+      <!-- Results Section (hidden by default) -->
+      <section id="resultsSection" class="results-section hidden">
+        
+        <!-- Hero Age Display Card -->
+        <div class="hero-result-card glass-card">
+          <div class="hero-header">
+            <div class="person-tag" id="personTag">
+              <i data-lucide="user-check"></i>
+              <span id="personNameDisplay">Your Age</span>
+            </div>
+            <div class="hero-actions">
+              <button id="copySummaryBtn" class="btn-sm btn-glass" title="Copy age summary">
+                <i data-lucide="copy"></i> Copy Summary
+              </button>
+              <button id="celebrateBtn" class="btn-sm btn-glass" title="Launch confetti">
+                <i data-lucide="party-popper"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main 3 Numbers -->
+          <div class="main-age-grid">
+            <div class="age-stat-box highlight-box">
+              <span class="stat-number" id="yearsValue">0</span>
+              <span class="stat-label">Years</span>
+            </div>
+            <div class="age-stat-box">
+              <span class="stat-number" id="monthsValue">0</span>
+              <span class="stat-label">Months</span>
+            </div>
+            <div class="age-stat-box">
+              <span class="stat-number" id="daysValue">0</span>
+              <span class="stat-label">Days</span>
+            </div>
+          </div>
+
+          <!-- Live Real-Time Ticker -->
+          <div class="live-ticker-card">
+            <div class="ticker-pulse"></div>
+            <div class="ticker-content">
+              <span class="ticker-label">Living every moment:</span>
+              <div class="ticker-digits">
+                <span id="liveSecondsCount" class="live-count">0</span>
+                <span class="ticker-unit">seconds of life experienced</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Birthday Banner if today -->
+          <div id="birthdayBanner" class="birthday-banner hidden">
+            <div class="banner-icon">🎂</div>
+            <div class="banner-text">
+              <h3>Happy Birthday! 🎉</h3>
+              <p>Wishing you an extraordinary year ahead filled with joy and wonder!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Next Birthday Card -->
+        <div class="glass-card next-bday-card">
+          <div class="section-title">
+            <i data-lucide="gift"></i>
+            <h3>Next Birthday Countdown</h3>
+          </div>
+          <p class="next-bday-date" id="nextBirthdayDate">Next birthday on ...</p>
+          
+          <div class="countdown-grid">
+            <div class="countdown-unit">
+              <span class="cd-number" id="cdDays">0</span>
+              <span class="cd-label">Days</span>
+            </div>
+            <div class="countdown-sep">:</div>
+            <div class="countdown-unit">
+              <span class="cd-number" id="cdHours">0</span>
+              <span class="cd-label">Hours</span>
+            </div>
+            <div class="countdown-sep">:</div>
+            <div class="countdown-unit">
+              <span class="cd-number" id="cdMinutes">0</span>
+              <span class="cd-label">Mins</span>
+            </div>
+            <div class="countdown-sep">:</div>
+            <div class="countdown-unit">
+              <span class="cd-number" id="cdSeconds">0</span>
+              <span class="cd-label">Secs</span>
+            </div>
+          </div>
+
+          <!-- Year progress bar -->
+          <div class="progress-container">
+            <div class="progress-info">
+              <span>Solar Year Progress</span>
+              <span id="solarProgressPercent">0%</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="solarProgressBar" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs for Detailed Insights -->
+        <div class="tabs-nav-wrapper">
+          <div class="tabs-nav" role="tablist">
+            <button class="tab-btn active" data-tab="tab-stats" role="tab">
+              <i data-lucide="bar-chart-2"></i>
+              <span>Life in Numbers</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-astrology" role="tab">
+              <i data-lucide="compass"></i>
+              <span>Astrology & Facts</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-milestones" role="tab">
+              <i data-lucide="award"></i>
+              <span>Milestones</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-planets" role="tab">
+              <i data-lucide="orbit"></i>
+              <span>Cosmic Age</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 1: Life in Numbers -->
+        <div id="tab-stats" class="tab-pane active">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="calendar-range"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalMonths">0</span>
+                <span class="stat-card-name">Total Months</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="calendar-days"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalWeeks">0</span>
+                <span class="stat-card-name">Total Weeks</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="sun"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalDays">0</span>
+                <span class="stat-card-name">Total Days</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="clock"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalHours">0</span>
+                <span class="stat-card-name">Total Hours</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="activity"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalHeartbeats">0</span>
+                <span class="stat-card-name">Approx. Heartbeats (~80 bpm)</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="wind"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalBreaths">0</span>
+                <span class="stat-card-name">Approx. Breaths Taken (~16/min)</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="moon"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalSleepDays">0</span>
+                <span class="stat-card-name">Days Spent Sleeping (~8 hrs/day)</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-icon"><i data-lucide="utensils"></i></div>
+              <div class="stat-card-data">
+                <span class="stat-card-val" id="totalMeals">0</span>
+                <span class="stat-card-name">Estimated Meals Eaten (~3/day)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Astrology & Fun Facts -->
+        <div id="tab-astrology" class="tab-pane">
+          <div class="astrology-grid">
+            <div class="astro-card glass-card">
+              <div class="astro-badge" id="zodiacElementBadge">Fire</div>
+              <div class="astro-icon-wrapper" id="zodiacIconEmoji">♈</div>
+              <h4 id="zodiacSignName">Aries</h4>
+              <p class="astro-sub" id="zodiacDateRange">Mar 21 - Apr 19</p>
+              <div class="astro-traits" id="zodiacTraits">Courageous, determined, confident, enthusiastic</div>
+            </div>
+
+            <div class="astro-card glass-card">
+              <div class="astro-badge">Chinese Zodiac</div>
+              <div class="astro-icon-wrapper" id="chineseZodiacEmoji">🐉</div>
+              <h4 id="chineseZodiacName">Year of the Dragon</h4>
+              <p class="astro-sub" id="chineseZodiacElement">Wood Dragon</p>
+              <div class="astro-traits" id="chineseZodiacTraits">Charismatic, intelligent, confident, powerful</div>
+            </div>
+
+            <div class="astro-card glass-card">
+              <div class="astro-badge">Birth Day</div>
+              <div class="astro-icon-wrapper">🗓️</div>
+              <h4 id="birthDayOfWeek">Friday</h4>
+              <p class="astro-sub">Day of the Week</p>
+              <div class="astro-traits" id="dayOfWeekPoem">"Friday's child is loving and giving"</div>
+            </div>
+
+            <div class="astro-card glass-card">
+              <div class="astro-badge">Symbols</div>
+              <div class="astro-icon-wrapper">💎</div>
+              <h4 id="birthstoneName">Diamond</h4>
+              <p class="astro-sub">Birthstone & Flower</p>
+              <div class="astro-traits" id="birthFlowerName">Flower: Daisy</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Milestones Tracker -->
+        <div id="tab-milestones" class="tab-pane">
+          <div class="milestones-container glass-card">
+            <div class="milestones-header">
+              <h4>Life Journeys & Milestones</h4>
+              <p>Key moments and round days lived throughout your lifetime</p>
+            </div>
+            <div class="timeline" id="milestonesTimeline">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Cosmic / Planetary Age -->
+        <div id="tab-planets" class="tab-pane">
+          <div class="planets-intro">
+            <h4>Your Age Across the Solar System 🪐</h4>
+            <p>Because planets orbit the Sun at different speeds, your age is completely different on each world!</p>
+          </div>
+          <div class="planets-grid" id="planetsGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Crafted with precision &amp; care • Powered by Luxon &amp; modern web standards</p>
+    </footer>
+  </div>
+
+  <!-- Saved Profiles Modal -->
+  <div id="profilesModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h3 id="modalTitle"><i data-lucide="bookmarks"></i> Saved Birthdays</h3>
+        <button id="closeModalBtn" class="icon-btn-sm" aria-label="Close modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="modalProfilesList" class="modal-profiles-list">
+          <p class="empty-state">No saved birthdays yet. Calculate and click "Save" to keep birthdays handy!</p>
+        </div>
+      </div>
     </div>
-  </body>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/luxon/build/global/luxon.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
- <script src="https://cdn.jsdelivr.net/npm/luxon/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="logic.js"></script>
+</body>
 </html>
