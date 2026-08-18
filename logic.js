@@ -1,9 +1,80 @@
 /**
  * AuraAge — Modern Age & Life Insights Engine
- * Built with vanilla JS & Luxon
+ * Built with vanilla JS, Luxon & File System Access API
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+// =========================================================
+// 0. IndexedDB Helper for File System Directory Handles
+// =========================================================
+const AuraStorageDB = {
+  dbName: 'AuraAgeStorageDB',
+  version: 1,
+  storeName: 'directory_handles',
+
+  async open() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.version);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(this.storeName)) {
+          db.createObjectStore(this.storeName);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  async setDirectoryHandle(key, handle) {
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        const req = store.put(handle, key);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      console.warn('IndexedDB set error:', e);
+      return false;
+    }
+  },
+
+  async getDirectoryHandle(key) {
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(this.storeName, 'readonly');
+        const store = tx.objectStore(this.storeName);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      console.warn('IndexedDB get error:', e);
+      return null;
+    }
+  },
+
+  async removeDirectoryHandle(key) {
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(this.storeName, 'readwrite');
+        const store = tx.objectStore(this.storeName);
+        const req = store.delete(key);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      console.warn('IndexedDB remove error:', e);
+      return false;
+    }
+  }
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Lucide icons
   if (window.lucide) {
     lucide.createIcons();
@@ -21,23 +92,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const profileNameInput = document.getElementById('profileName');
   const resetBtn = document.getElementById('resetBtn');
   const saveProfileBtn = document.getElementById('saveProfileBtn');
+  const saveToFolderBtn = document.getElementById('saveToFolderBtn');
+  const selectFolderBtn = document.getElementById('selectFolderBtn');
+  const folderSettingsBtn = document.getElementById('folderSettingsBtn');
   const savedProfilesBtn = document.getElementById('savedProfilesBtn');
   const savedCountBadge = document.getElementById('savedCountBadge');
   const savedChipsBar = document.getElementById('savedChipsBar');
   const savedChipsList = document.getElementById('savedChipsList');
   const resultsSection = document.getElementById('resultsSection');
   const copySummaryBtn = document.getElementById('copySummaryBtn');
+  const exportReportBtn = document.getElementById('exportReportBtn');
   const celebrateBtn = document.getElementById('celebrateBtn');
   const profilesModal = document.getElementById('profilesModal');
   const closeModalBtn = document.getElementById('closeModalBtn');
   const modalProfilesList = document.getElementById('modalProfilesList');
   const toastContainer = document.getElementById('toastContainer');
 
+  // Modal Folder Elements
+  const modalChangeFolderBtn = document.getElementById('modalChangeFolderBtn');
+  const modalSyncToFolderBtn = document.getElementById('modalSyncToFolderBtn');
+  const modalImportFromFolderBtn = document.getElementById('modalImportFromFolderBtn');
+  const modalDisconnectFolderBtn = document.getElementById('modalDisconnectFolderBtn');
+
   // State
   let liveTickerInterval = null;
   let activeBirthDateTime = null;
   let activeTargetDateTime = null;
   let isCustomTargetActive = false;
+  let currentFolderHandle = null;
+  const FOLDER_KEY = 'user_active_save_folder';
 
   // =========================================================
   // 1. Theme Management (Dark / Light)
@@ -545,7 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================
-  // 12. Saved Profiles Management (localStorage)
+  // 12. Saved Profiles Management (localStorage + Folder)
   // =========================================================
   function getSavedProfiles() {
     try {
@@ -587,7 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update Modal List
     modalProfilesList.innerHTML = '';
     if (profiles.length === 0) {
-      modalProfilesList.innerHTML = '<p class="empty-state">No saved birthdays yet. Calculate and click "Save" to keep birthdays handy!</p>';
+      modalProfilesList.innerHTML = '<p class="empty-state">No saved birthdays yet. Calculate and click "Save" or "Save to Folder" to keep birthdays handy!</p>';
     } else {
       profiles.forEach((p, idx) => {
         const item = document.createElement('div');
@@ -600,6 +683,9 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="profile-item-actions">
             <button class="btn-sm btn-glass load-p-btn" data-idx="${idx}" title="Load this birthday">
               <i data-lucide="play"></i> Use
+            </button>
+            <button class="btn-sm btn-glass save-p-to-folder-btn" data-idx="${idx}" title="Save profile file to folder">
+              <i data-lucide="folder-down"></i>
             </button>
             <button class="btn-sm btn-glass delete-p-btn" data-idx="${idx}" title="Delete profile">
               <i data-lucide="trash-2"></i>
@@ -614,6 +700,17 @@ document.addEventListener('DOMContentLoaded', () => {
           const idx = parseInt(b.dataset.idx, 10);
           loadProfile(profiles[idx]);
           profilesModal.classList.add('hidden');
+        });
+      });
+
+      modalProfilesList.querySelectorAll('.save-p-to-folder-btn').forEach(b => {
+        b.addEventListener('click', async () => {
+          const idx = parseInt(b.dataset.idx, 10);
+          const p = profiles[idx];
+          const bDate = luxon.DateTime.fromISO(p.birthday);
+          const tDate = luxon.DateTime.now();
+          const profileData = generateUserFullProfileData(bDate, tDate, p.name);
+          await saveUserDataToFolder(profileData);
         });
       });
 
@@ -657,10 +754,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     profiles.push({ name, birthday: bday });
     saveProfilesList(profiles);
-    showToast(`Saved "${name}" successfully!`);
+    showToast(`Saved "${name}" to browser memory!`);
   });
 
   savedProfilesBtn.addEventListener('click', () => {
+    updateSavedUI();
+    profilesModal.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+  });
+
+  folderSettingsBtn.addEventListener('click', () => {
     updateSavedUI();
     profilesModal.classList.remove('hidden');
     if (window.lucide) lucide.createIcons();
@@ -677,7 +780,553 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // =========================================================
-  // 13. Reset Handler
+  // 13. File System Access API & Folder Integration
+  // =========================================================
+
+  async function verifyPermission(fileHandle, readWrite = true) {
+    if (!fileHandle) return false;
+    const options = {};
+    if (readWrite) {
+      options.mode = 'readwrite';
+    }
+    try {
+      if ((await fileHandle.queryPermission(options)) === 'granted') {
+        return true;
+      }
+      if ((await fileHandle.requestPermission(options)) === 'granted') {
+        return true;
+      }
+    } catch (err) {
+      console.warn('Permission query/request error:', err);
+    }
+    return false;
+  }
+
+  async function initFolderSystem() {
+    if (!window.showDirectoryPicker) {
+      updateFolderUI(null, false, 'Standard File Download mode (Browser Direct Access not supported)');
+      return;
+    }
+
+    try {
+      const handle = await AuraStorageDB.getDirectoryHandle(FOLDER_KEY);
+      if (handle) {
+        currentFolderHandle = handle;
+        updateFolderUI(handle, true);
+      } else {
+        updateFolderUI(null, false);
+      }
+    } catch (err) {
+      console.warn('Error reading stored directory handle:', err);
+      updateFolderUI(null, false);
+    }
+  }
+
+  async function requestFolderSelection() {
+    if (!window.showDirectoryPicker) {
+      showToast('Directory picker is not supported in this browser. Direct file download will be used.', 'info');
+      return null;
+    }
+
+    try {
+      const dirHandle = await window.showDirectoryPicker({
+        id: 'aura_age_data_folder',
+        mode: 'readwrite',
+        startIn: 'desktop'
+      });
+
+      const hasPermission = await verifyPermission(dirHandle, true);
+      if (!hasPermission) {
+        showToast('Folder permission was not granted.', 'error');
+        return null;
+      }
+
+      currentFolderHandle = dirHandle;
+      await AuraStorageDB.setDirectoryHandle(FOLDER_KEY, dirHandle);
+      updateFolderUI(dirHandle, true);
+      showToast(`Connected to folder "${dirHandle.name}"!`);
+      return dirHandle;
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Folder picker error:', err);
+        showToast('Failed to select folder: ' + err.message, 'error');
+      }
+      return null;
+    }
+  }
+
+  async function disconnectFolder() {
+    currentFolderHandle = null;
+    await AuraStorageDB.removeDirectoryHandle(FOLDER_KEY);
+    updateFolderUI(null, false);
+    showToast('Disconnected save folder.');
+  }
+
+  function updateFolderUI(handle, isConnected, customStatus = '') {
+    const folderNameDisplay = document.getElementById('folderNameDisplay');
+    const folderIconActive = document.getElementById('folderIconActive');
+    const folderIconInactive = document.getElementById('folderIconInactive');
+    const folderSyncBar = document.getElementById('folderSyncBar');
+    const selectFolderBtnText = document.getElementById('selectFolderBtnText');
+    const folderStatusDot = document.getElementById('folderStatusDot');
+
+    const modalFolderBadge = document.getElementById('modalFolderBadge');
+    const modalFolderPath = document.getElementById('modalFolderPath');
+    const modalFolderBtnLabel = document.getElementById('modalFolderBtnLabel');
+    const modalDisconnectFolderBtn = document.getElementById('modalDisconnectFolderBtn');
+
+    if (isConnected && handle) {
+      const name = handle.name || 'Selected Folder';
+      if (folderNameDisplay) folderNameDisplay.textContent = `📁 ${name}`;
+      if (folderIconActive) folderIconActive.style.display = 'inline-block';
+      if (folderIconInactive) folderIconInactive.style.display = 'none';
+      if (folderSyncBar) folderSyncBar.classList.add('connected');
+      if (selectFolderBtnText) selectFolderBtnText.textContent = 'Change Folder';
+      if (folderStatusDot) folderStatusDot.classList.add('active');
+
+      if (modalFolderBadge) {
+        modalFolderBadge.textContent = 'Connected';
+        modalFolderBadge.className = 'folder-badge connected';
+      }
+      if (modalFolderPath) modalFolderPath.textContent = `📁 /${name}/`;
+      if (modalFolderBtnLabel) modalFolderBtnLabel.textContent = 'Change Folder';
+      if (modalDisconnectFolderBtn) modalDisconnectFolderBtn.style.display = 'inline-flex';
+    } else {
+      if (folderNameDisplay) folderNameDisplay.textContent = customStatus || 'No folder selected';
+      if (folderIconActive) folderIconActive.style.display = 'none';
+      if (folderIconInactive) folderIconInactive.style.display = 'inline-block';
+      if (folderSyncBar) folderSyncBar.classList.remove('connected');
+      if (selectFolderBtnText) selectFolderBtnText.textContent = 'Choose Folder';
+      if (folderStatusDot) folderStatusDot.classList.remove('active');
+
+      if (modalFolderBadge) {
+        modalFolderBadge.textContent = 'Not Connected';
+        modalFolderBadge.className = 'folder-badge disconnected';
+      }
+      if (modalFolderPath) modalFolderPath.textContent = 'No folder connected (Click "Select Save Folder")';
+      if (modalFolderBtnLabel) modalFolderBtnLabel.textContent = 'Select Save Folder';
+      if (modalDisconnectFolderBtn) modalDisconnectFolderBtn.style.display = 'none';
+    }
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // Folder Button Listeners
+  selectFolderBtn.addEventListener('click', requestFolderSelection);
+  modalChangeFolderBtn.addEventListener('click', requestFolderSelection);
+  modalDisconnectFolderBtn.addEventListener('click', disconnectFolder);
+
+  // Generate complete structured data object for user
+  function generateUserFullProfileData(birthDate, targetDate, name) {
+    const diff = targetDate.diff(birthDate, ['years', 'months', 'days']);
+    const years = Math.floor(diff.years);
+    const months = Math.floor(diff.months);
+    const days = Math.floor(diff.days);
+
+    const totalDays = Math.floor(targetDate.diff(birthDate, 'days').days);
+    const totalWeeks = Math.floor(totalDays / 7);
+    const totalMonths = (years * 12) + months;
+    const totalHours = totalDays * 24;
+    const totalMinutes = totalHours * 60;
+    const totalSeconds = totalDays * 86400;
+
+    const approxHeartbeats = Math.floor(totalMinutes * 80);
+    const approxBreaths = Math.floor(totalMinutes * 16);
+    const approxSleepDays = Math.floor(totalDays * (8 / 24));
+    const approxMeals = Math.floor(totalDays * 3);
+
+    // Western Zodiac
+    const m = birthDate.month;
+    const d = birthDate.day;
+    const y = birthDate.year;
+    const sign = ZODIAC_DATA.find(z => {
+      const [sm, sd] = z.start;
+      const [em, ed] = z.end;
+      if (m === sm && d >= sd) return true;
+      if (m === em && d <= ed) return true;
+      return false;
+    }) || ZODIAC_DATA[0];
+
+    // Chinese Zodiac
+    const animalIndex = (y - 4) % 12;
+    const animal = CHINESE_ANIMALS[(animalIndex + 12) % 12];
+    const elemIndex = Math.floor(((y - 4) % 10) / 2);
+    const element = CHINESE_ELEMENTS[(elemIndex + 5) % 5];
+
+    // Symbols
+    const symbolData = MONTH_SYMBOLS[m - 1];
+
+    // Planetary ages
+    const planetaryAges = PLANETS.map(p => ({
+      planet: p.name,
+      orbitalPeriodDays: p.orbitDays,
+      ageOnPlanet: parseFloat((totalDays / p.orbitDays).toFixed(2))
+    }));
+
+    return {
+      application: "AuraAge — Precision Age & Life Insights",
+      version: "2.0",
+      savedAt: luxon.DateTime.now().toISO(),
+      savedAtFormatted: luxon.DateTime.now().toFormat('FFFF'),
+      user: {
+        name: name || "User Profile",
+        birthDate: birthDate.toISODate(),
+        birthDateFormatted: birthDate.toFormat('MMMM d, yyyy'),
+        birthDayOfWeek: birthDate.toFormat('EEEE'),
+        calculationTargetDate: targetDate.toISODate(),
+        calculationTargetDateFormatted: targetDate.toFormat('MMMM d, yyyy')
+      },
+      exactAge: {
+        years,
+        months,
+        days,
+        formatted: `${years} Years, ${months} Months, ${days} Days`
+      },
+      livingMetrics: {
+        totalDaysLived: totalDays,
+        totalWeeksLived: totalWeeks,
+        totalMonthsLived: totalMonths,
+        totalHoursLived: totalHours,
+        totalMinutesLived: totalMinutes,
+        totalSecondsLived: totalSeconds,
+        approxHeartbeats: approxHeartbeats,
+        approxBreaths: approxBreaths,
+        approxSleepDays: approxSleepDays,
+        approxMeals: approxMeals
+      },
+      astrologyAndSymbols: {
+        westernZodiac: {
+          sign: sign.name,
+          symbol: sign.symbol,
+          element: sign.element,
+          dateRange: sign.range,
+          traits: sign.traits
+        },
+        chineseZodiac: {
+          animal: animal.name,
+          emoji: animal.emoji,
+          element: element,
+          fullName: `${element} ${animal.name}`,
+          traits: animal.traits
+        },
+        birthDayOfWeek: birthDate.toFormat('EEEE'),
+        dayPoem: DAY_POEMS[birthDate.toFormat('EEEE')] || '',
+        birthstone: symbolData.stone,
+        flower: symbolData.flower
+      },
+      planetaryAges: planetaryAges
+    };
+  }
+
+  function generateReadableTextReport(profileData) {
+    const u = profileData.user;
+    const a = profileData.exactAge;
+    const m = profileData.livingMetrics;
+    const astro = profileData.astrologyAndSymbols;
+
+    let report = `================================================================================
+                    AURAAGE — LIFE INSIGHTS & AGE REPORT
+================================================================================
+Generated on: ${profileData.savedAtFormatted}
+
+1. USER PROFILE:
+--------------------------------------------------------------------------------
+• Name / Label:              ${u.name}
+• Date of Birth:             ${u.birthDateFormatted} (${u.birthDayOfWeek})
+• Age Calculated As Of:      ${u.calculationTargetDateFormatted}
+
+2. EXACT AGE:
+--------------------------------------------------------------------------------
+• Primary Age:               ${a.years} Years, ${a.months} Months, ${a.days} Days
+• Total Solar Orbit Time:    ${(m.totalDaysLived / 365.25).toFixed(4)} Earth Solar Years
+
+3. LIFE METRICS EXPERIENCED:
+--------------------------------------------------------------------------------
+• Total Days Lived:          ${m.totalDaysLived.toLocaleString()} days
+• Total Weeks Lived:         ${m.totalWeeksLived.toLocaleString()} weeks
+• Total Months Lived:        ${m.totalMonthsLived.toLocaleString()} months
+• Total Hours Lived:         ${m.totalHoursLived.toLocaleString()} hours
+• Total Minutes Lived:       ${m.totalMinutesLived.toLocaleString()} minutes
+• Total Seconds Lived:       ${m.totalSecondsLived.toLocaleString()} seconds
+• Approx. Heartbeats:        ${m.approxHeartbeats.toLocaleString()} beats (~80 bpm)
+• Approx. Breaths Taken:     ${m.approxBreaths.toLocaleString()} breaths (~16/min)
+• Days Spent Sleeping:       ${m.approxSleepDays.toLocaleString()} days (~8 hrs/day)
+• Estimated Meals Eaten:     ${m.approxMeals.toLocaleString()} meals (~3/day)
+
+4. ASTROLOGY & SYMBOLIC INSIGHTS:
+--------------------------------------------------------------------------------
+• Western Zodiac:            ${astro.westernZodiac.symbol} ${astro.westernZodiac.sign} (${astro.westernZodiac.element})
+  - Date Range:              ${astro.westernZodiac.dateRange}
+  - Traits:                  ${astro.westernZodiac.traits}
+• Chinese Zodiac:            ${astro.chineseZodiac.emoji} Year of the ${astro.chineseZodiac.fullName}
+  - Traits:                  ${astro.chineseZodiac.traits}
+• Birth Day of Week:         ${astro.birthDayOfWeek} (${astro.dayPoem})
+• Birthstone & Flower:       Stone: ${astro.birthstone} | Flower: ${astro.flower}
+
+5. COSMIC / PLANETARY AGES:
+--------------------------------------------------------------------------------
+`;
+
+    profileData.planetaryAges.forEach(p => {
+      report += `• ${p.planet.padEnd(12)}: ${p.ageOnPlanet.toString().padEnd(8)} Planetary Years (Orbit: ${p.orbitalPeriodDays} Earth days)\n`;
+    });
+
+    report += `
+================================================================================
+                  Crafted with AuraAge — Keep shining!
+================================================================================`;
+
+    return report;
+  }
+
+  async function writeDataToFolder(dirHandle, filename, content) {
+    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+
+  function triggerBrowserDownload(filename, content, mimeType = 'application/json') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function sanitizeFilename(name) {
+    return name.replace(/[^a-z0-9_\-]/gi, '_').toLowerCase();
+  }
+
+  // Save User Data Directly into the Connected Folder
+  async function saveUserDataToFolder(profileData) {
+    const safeName = sanitizeFilename(profileData.user.name);
+    const bDate = profileData.user.birthDate;
+    const jsonFilename = `profile_${safeName}_${bDate}.json`;
+    const txtFilename = `report_${safeName}_${bDate}.txt`;
+
+    const jsonContent = JSON.stringify(profileData, null, 2);
+    const txtContent = generateReadableTextReport(profileData);
+
+    // Save to local profile cache as well
+    const profiles = getSavedProfiles();
+    const existingIdx = profiles.findIndex(p => p.birthday === bDate && p.name === profileData.user.name);
+    if (existingIdx === -1) {
+      profiles.push({ name: profileData.user.name, birthday: bDate });
+      saveProfilesList(profiles);
+    }
+
+    // Check if directory picker is available
+    if (!window.showDirectoryPicker) {
+      triggerBrowserDownload(jsonFilename, jsonContent, 'application/json');
+      showToast(`Saved "${jsonFilename}" to your Downloads folder!`);
+      return;
+    }
+
+    // Check directory handle
+    let dirHandle = currentFolderHandle;
+    if (!dirHandle) {
+      dirHandle = await requestFolderSelection();
+      if (!dirHandle) {
+        // Fallback to direct download
+        triggerBrowserDownload(jsonFilename, jsonContent, 'application/json');
+        showToast(`Saved "${jsonFilename}" via direct download.`);
+        return;
+      }
+    } else {
+      const hasPerm = await verifyPermission(dirHandle, true);
+      if (!hasPerm) {
+        dirHandle = await requestFolderSelection();
+        if (!dirHandle) {
+          triggerBrowserDownload(jsonFilename, jsonContent, 'application/json');
+          showToast(`Saved "${jsonFilename}" via direct download.`);
+          return;
+        }
+      }
+    }
+
+    try {
+      // 1. Write structured JSON file
+      await writeDataToFolder(dirHandle, jsonFilename, jsonContent);
+
+      // 2. Write readable TXT report
+      await writeDataToFolder(dirHandle, txtFilename, txtContent);
+
+      // 3. Update master profiles list in folder
+      const allProfiles = getSavedProfiles();
+      await writeDataToFolder(dirHandle, 'aura_saved_profiles.json', JSON.stringify(allProfiles, null, 2));
+
+      triggerConfetti();
+      showToast(`Saved "${jsonFilename}" & report to folder "${dirHandle.name}"!`);
+    } catch (err) {
+      console.error('Error writing file to folder:', err);
+      // Fallback
+      triggerBrowserDownload(jsonFilename, jsonContent, 'application/json');
+      showToast(`Saved "${jsonFilename}" via direct download (Folder write error).`, 'error');
+    }
+  }
+
+  // Save to Folder Button Handler (Main Form)
+  saveToFolderBtn.addEventListener('click', async () => {
+    const bdayVal = birthdayInput.value;
+    if (!bdayVal) {
+      showToast('Please select your date of birth first', 'error');
+      birthdayInput.focus();
+      return;
+    }
+
+    const birthDate = luxon.DateTime.fromISO(bdayVal);
+    if (!birthDate.isValid) {
+      showToast('Invalid date of birth format', 'error');
+      return;
+    }
+
+    let targetDate = luxon.DateTime.now();
+    if (isCustomTargetActive && targetDateInput.value) {
+      const parsed = luxon.DateTime.fromISO(targetDateInput.value);
+      if (parsed.isValid) targetDate = parsed;
+    }
+
+    if (birthDate > targetDate) {
+      showToast('Birth date cannot be in the future!', 'error');
+      return;
+    }
+
+    const name = profileNameInput.value.trim() || `Profile (${bdayVal})`;
+    const profileData = generateUserFullProfileData(birthDate, targetDate, name);
+
+    await saveUserDataToFolder(profileData);
+  });
+
+  // Save Report Button Handler (Hero Results)
+  exportReportBtn.addEventListener('click', async () => {
+    if (!activeBirthDateTime) {
+      showToast('Please calculate your age first', 'error');
+      return;
+    }
+
+    const targetDate = activeTargetDateTime || luxon.DateTime.now();
+    const name = profileNameInput.value.trim() || 'Your Profile';
+    const profileData = generateUserFullProfileData(activeBirthDateTime, targetDate, name);
+
+    await saveUserDataToFolder(profileData);
+  });
+
+  // Export All Profiles to Folder (Modal)
+  modalSyncToFolderBtn.addEventListener('click', async () => {
+    const profiles = getSavedProfiles();
+    if (profiles.length === 0) {
+      showToast('No saved profiles to export yet', 'info');
+      return;
+    }
+
+    let dirHandle = currentFolderHandle;
+    if (!dirHandle) {
+      dirHandle = await requestFolderSelection();
+      if (!dirHandle) return;
+    }
+
+    const hasPerm = await verifyPermission(dirHandle, true);
+    if (!hasPerm) {
+      dirHandle = await requestFolderSelection();
+      if (!dirHandle) return;
+    }
+
+    try {
+      for (const p of profiles) {
+        const bDate = luxon.DateTime.fromISO(p.birthday);
+        const tDate = luxon.DateTime.now();
+        const pData = generateUserFullProfileData(bDate, tDate, p.name);
+        const safeName = sanitizeFilename(p.name);
+        await writeDataToFolder(dirHandle, `profile_${safeName}_${p.birthday}.json`, JSON.stringify(pData, null, 2));
+      }
+
+      await writeDataToFolder(dirHandle, 'aura_all_profiles_backup.json', JSON.stringify(profiles, null, 2));
+      triggerConfetti();
+      showToast(`Exported ${profiles.length} profiles to folder "${dirHandle.name}"!`);
+    } catch (err) {
+      console.error('Batch export error:', err);
+      showToast('Export failed: ' + err.message, 'error');
+    }
+  });
+
+  // Import Profiles from Folder (Modal)
+  modalImportFromFolderBtn.addEventListener('click', async () => {
+    let dirHandle = currentFolderHandle;
+    if (!dirHandle) {
+      dirHandle = await requestFolderSelection();
+      if (!dirHandle) return;
+    }
+
+    const hasPerm = await verifyPermission(dirHandle, true);
+    if (!hasPerm) {
+      dirHandle = await requestFolderSelection();
+      if (!dirHandle) return;
+    }
+
+    try {
+      let importedCount = 0;
+      const profiles = getSavedProfiles();
+
+      // Read files from folder handle
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+          try {
+            const file = await entry.getFile();
+            const text = await file.text();
+            const json = JSON.parse(text);
+
+            // Check if backup array format
+            if (Array.isArray(json)) {
+              json.forEach(item => {
+                if (item.name && item.birthday) {
+                  const exists = profiles.some(p => p.name === item.name && p.birthday === item.birthday);
+                  if (!exists) {
+                    profiles.push({ name: item.name, birthday: item.birthday });
+                    importedCount++;
+                  }
+                }
+              });
+            } else if (json.user && json.user.birthDate) {
+              // AuraAge profile structure
+              const name = json.user.name || entry.name.replace('.json', '');
+              const bday = json.user.birthDate;
+              const exists = profiles.some(p => p.name === name && p.birthday === bday);
+              if (!exists) {
+                profiles.push({ name, birthday: bday });
+                importedCount++;
+              }
+            } else if (json.name && json.birthday) {
+              const exists = profiles.some(p => p.name === json.name && p.birthday === json.birthday);
+              if (!exists) {
+                profiles.push({ name: json.name, birthday: json.birthday });
+                importedCount++;
+              }
+            }
+          } catch (e) {
+            // Ignore non-profile json
+          }
+        }
+      }
+
+      if (importedCount > 0) {
+        saveProfilesList(profiles);
+        showToast(`Imported ${importedCount} profile(s) from "${dirHandle.name}"!`);
+      } else {
+        showToast(`No new profiles found in folder "${dirHandle.name}".`);
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      showToast('Import failed: ' + err.message, 'error');
+    }
+  });
+
+  // =========================================================
+  // 14. Reset Handler
   // =========================================================
   resetBtn.addEventListener('click', () => {
     fpBirthday.clear();
@@ -694,7 +1343,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // =========================================================
-  // 14. Copy Summary & Confetti
+  // 15. Copy Summary & Confetti
   // =========================================================
   copySummaryBtn.addEventListener('click', () => {
     if (!activeBirthDateTime) return;
@@ -759,7 +1408,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================
-  // 15. Helper Utilities
+  // 16. Helper Utilities
   // =========================================================
   function showToast(message, type = 'info') {
     const toast = document.createElement('div');
@@ -772,7 +1421,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(() => {
       toast.remove();
-    }, 3000);
+    }, 3200);
   }
 
   function animateNumber(elementId, targetValue, duration = 800) {
@@ -785,7 +1434,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function update(currentTime) {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
       const easedProgress = 1 - Math.pow(1 - progress, 3);
       const current = Math.floor(start + (targetValue - start) * easedProgress);
 
@@ -807,6 +1455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
-  // Initial UI sync for saved profiles
+  // Initialize UI & folder system
   updateSavedUI();
+  await initFolderSystem();
 });

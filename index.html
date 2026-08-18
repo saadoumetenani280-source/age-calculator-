@@ -42,6 +42,10 @@
       </div>
 
       <div class="header-actions">
+        <button id="folderSettingsBtn" class="icon-btn folder-btn" title="Computer Folder Sync" aria-label="Computer Folder Sync">
+          <i data-lucide="folder"></i>
+          <span class="folder-status-dot" id="folderStatusDot"></span>
+        </button>
         <button id="savedProfilesBtn" class="icon-btn" title="Saved Birthdays" aria-label="Saved Birthdays">
           <i data-lucide="bookmark"></i>
           <span class="badge" id="savedCountBadge" style="display:none;">0</span>
@@ -114,13 +118,34 @@
             </div>
           </div>
 
+          <!-- Folder Sync Status Bar -->
+          <div class="folder-sync-bar" id="folderSyncBar">
+            <div class="folder-info">
+              <i data-lucide="folder-check" class="folder-icon folder-icon-active" id="folderIconActive" style="display:none;"></i>
+              <i data-lucide="folder" class="folder-icon" id="folderIconInactive"></i>
+              <div class="folder-text-wrap">
+                <span class="folder-label">Computer Save Folder:</span>
+                <span class="folder-name" id="folderNameDisplay">No folder selected</span>
+              </div>
+            </div>
+            <div class="folder-bar-actions">
+              <button type="button" id="selectFolderBtn" class="btn-xs btn-glass">
+                <i data-lucide="folder-plus"></i> <span id="selectFolderBtnText">Choose Folder</span>
+              </button>
+            </div>
+          </div>
+
           <!-- Action Buttons -->
           <div class="button-group">
             <button type="submit" id="calculateBtn" class="btn btn-primary">
               <i data-lucide="calculator"></i>
               <span>Calculate Age</span>
             </button>
-            <button type="button" id="saveProfileBtn" class="btn btn-secondary" title="Save this birthday">
+            <button type="button" id="saveToFolderBtn" class="btn btn-emerald" title="Save user information directly into your computer folder">
+              <i data-lucide="folder-down"></i>
+              <span>Save to Folder</span>
+            </button>
+            <button type="button" id="saveProfileBtn" class="btn btn-secondary" title="Save to browser memory">
               <i data-lucide="bookmark-plus"></i>
               <span>Save</span>
             </button>
@@ -150,7 +175,10 @@
             </div>
             <div class="hero-actions">
               <button id="copySummaryBtn" class="btn-sm btn-glass" title="Copy age summary">
-                <i data-lucide="copy"></i> Copy Summary
+                <i data-lucide="copy"></i> Copy
+              </button>
+              <button id="exportReportBtn" class="btn-sm btn-glass" title="Save comprehensive report to folder">
+                <i data-lucide="file-text"></i> Save Report
               </button>
               <button id="celebrateBtn" class="btn-sm btn-glass" title="Launch confetti">
                 <i data-lucide="party-popper"></i>
@@ -403,8 +431,48 @@
         </button>
       </div>
       <div class="modal-body">
+        <!-- Computer Folder Storage Integration -->
+        <div class="modal-folder-section glass-card">
+          <div class="folder-section-header">
+            <div class="folder-title-wrap">
+              <div class="folder-icon-circle">
+                <i data-lucide="hard-drive"></i>
+              </div>
+              <div>
+                <h4>Computer Folder Storage</h4>
+                <p id="modalFolderSub">Save profiles & full insight reports directly into your chosen computer folder</p>
+              </div>
+            </div>
+            <span class="folder-badge disconnected" id="modalFolderBadge">Not Connected</span>
+          </div>
+
+          <div class="folder-path-box">
+            <span class="folder-path-label">Active Folder:</span>
+            <span class="folder-path-val" id="modalFolderPath">No folder selected</span>
+          </div>
+
+          <div class="folder-section-controls">
+            <button type="button" id="modalChangeFolderBtn" class="btn-sm btn-primary">
+              <i data-lucide="folder-input"></i> <span id="modalFolderBtnLabel">Select Save Folder</span>
+            </button>
+            <button type="button" id="modalSyncToFolderBtn" class="btn-sm btn-glass" title="Export all saved profiles into folder">
+              <i data-lucide="upload-cloud"></i> Export All to Folder
+            </button>
+            <button type="button" id="modalImportFromFolderBtn" class="btn-sm btn-glass" title="Import profile JSON files from folder">
+              <i data-lucide="download-cloud"></i> Import from Folder
+            </button>
+            <button type="button" id="modalDisconnectFolderBtn" class="btn-sm btn-ghost danger-btn" title="Disconnect current folder" style="display:none;">
+              <i data-lucide="unlink"></i> Disconnect
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-section-divider">
+          <span>Saved Profiles List</span>
+        </div>
+
         <div id="modalProfilesList" class="modal-profiles-list">
-          <p class="empty-state">No saved birthdays yet. Calculate and click "Save" to keep birthdays handy!</p>
+          <p class="empty-state">No saved birthdays yet. Calculate and click "Save" or "Save to Folder" to keep birthdays handy!</p>
         </div>
       </div>
     </div>
